@@ -7,15 +7,23 @@ const app = express();
 
 let helpless = [];
 
+const userIds = {};
+
 const createPlea = (plea) => ({
 	...plea,
 	id: randomUUID(),
+	userId: randomUUID(),
 	createdAt: new Date(),
 	isActive: true,
 });
 
 const sanitizePlea = (entry) => {
-	const { sessionId, url, isActive, ...sanitizedEntry } = entry;
+	const { userId, sessionId, url, isActive, ...sanitizedEntry } = entry;
+	return sanitizedEntry;
+};
+
+const sanitizeUserFromPlea = (entry) => {
+	const { userId, ...sanitizedEntry } = entry;
 	return sanitizedEntry;
 };
 
@@ -46,21 +54,65 @@ const broadcastMsg = (topic, data) => {
 };
 
 const sendInitialMsg = (socket) => {
-	// TODO: Remove get route handler from server
-	// TODO: Replace client get request with websocket handler
 	sendMsg(socket, 'list', { pleas: getActivePleas().map(sanitizePlea) });
+};
+
+const handlePlea = (socket, data) => {
+	const entry = createPlea(data);
+	helpless.push(entry);
+
+	userIds[socket] = entry.userId;
+
+	sendMsg(socket, 'pleaAccepted', entry);
+	broadcastMsg('added', sanitizePlea(entry));
+};
+
+const handleCancelPlea = (socket, { id, userId }) => {
+	const index = helpless.findIndex((noob) => noob.id === id);
+
+	if (index === -1) {
+		sendMsg(socket, 'pleaNotFound', { id });
+		return;
+	}
+
+	const plea = helpless[index];
+	if (plea.userId !== userId) {
+		sendMsg(socket, 'unauthorized', { id, userId });
+	} else {
+		helpless.splice(index, 1);
+		delete userIds[socket];
+		sendMsg(socket, 'pleaCanceled', { id });
+		broadcastMsg('removed', { id });
+	}
 };
 
 const handleSessionMsg = (socket, { id }) => {
 	const plea = helpless.find((noob) => noob.id === id && noob.isActive);
 	if (plea === undefined) {
-		sendMsg(socket, 'sessionNotFound', { id });
+		sendMsg(socket, 'pleaNotFound', { id });
 	} else {
-		sendMsg(socket, 'sessionInfo', plea);
+		sendMsg(socket, 'sessionInfo', sanitizeUserFromPlea(plea));
 	}
 };
 
+const handleDisconnect = (socket) => () => {
+	const userId = userIds[socket];
+	if (userId === undefined) {
+		return;
+	}
+
+	const index = helpless.findIndex((noob) => noob.userId === userId);
+	const id = helpless[index].id;
+
+	helpless.splice(index, 1);
+	delete userIds[socket];
+
+	broadcastMsg('removed', { id });
+};
+
 const handlers = {
+	halllpPlease: handlePlea,
+	neverMind: handleCancelPlea,
 	sessionRequested: handleSessionMsg,
 };
 
@@ -73,6 +125,8 @@ const receiveMsg = (socket) => (msg) => {
 
 wsServer.on('connection', (socket) => {
 	socket.on('message', receiveMsg(socket));
+
+	socket.on('close', handleDisconnect(socket));
 
 	sendInitialMsg(socket);
 });
@@ -87,20 +141,6 @@ server.on('upgrade', (request, socket, head) => {
 // TODO: Remove me
 app.get('/halllp', (_, res) => {
 	res.json(helpless).status(200).end();
-});
-
-app.put('/halllp', (req, res) => {
-	const index = getIndexOfSession(req.body.sessionId);
-	if (index === -1) {
-		const entry = createPlea(req.body);
-		helpless.push(entry);
-		broadcastMsg('added', sanitizePlea(entry));
-		res.status(201).end();
-	} else {
-		helpless[index] === req.body;
-		broadcastMsg('updated', req.body);
-		res.status(204).end();
-	}
 });
 
 app.delete('/halllp/:sessionId', (req, res) => {
