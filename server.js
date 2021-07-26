@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
-import express from 'express';
-import ws from 'ws';
+const crypto = require('crypto');
+const express = require('express');
+const ws = require('ws');
 
 const port = 8080;
 const app = express();
@@ -11,8 +11,8 @@ const userIds = {};
 
 const createPlea = (plea) => ({
 	...plea,
-	id: randomUUID(),
-	userId: randomUUID(),
+	id: crypto.randomUUID(),
+	userId: crypto.randomUUID(),
 	createdAt: new Date(),
 	isActive: true,
 });
