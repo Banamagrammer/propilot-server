@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const ws = require('ws');
 
-const port = 8080;
+const port = 44300;
 const app = express();
 
 let helpless = [];
@@ -28,8 +28,6 @@ const sanitizeUserFromPlea = (entry) => {
 };
 
 const getActivePleas = () => helpless.filter((plea) => plea.isActive);
-
-const getIndexOfSession = (sessionId) => helpless.findIndex((noob) => noob.sessionId === sessionId);
 
 app.use(express.json());
 
@@ -138,22 +136,8 @@ server.on('upgrade', (request, socket, head) => {
 	});
 });
 
-// TODO: Remove me
-app.get('/halllp', (_, res) => {
-	res.json(helpless).status(200).end();
-});
-
-app.delete('/halllp/:sessionId', (req, res) => {
-	const { sessionId } = req.params;
-	const index = getIndexOfSession(sessionId);
-	if (index === -1) {
-		res.status(404).end();
-	} else {
-		const id = helpless[index].id;
-		// const [{ id }] = helpless.splice(index, 1);
-		broadcastMsg('removed', { id });
-		res.status(204).end();
-	}
+app.get('/', (_, res) => {
+	res.send('Ok');
 });
 
 console.log(`Server listening on port ${port}`);
